@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 
 
-def hotelling_ttest(X : np.array, to_alr=False):
+def hotelling_ttest(X: np.array, to_alr=False):
     """ Tests if table is centered around zero.
 
     Parameters
@@ -32,7 +32,7 @@ def hotelling_ttest(X : np.array, to_alr=False):
         X_ = X
     muX = X_.mean(axis=0)
     nx, p = X_.shape
-    if nx < p :
+    if nx < p:
         raise ValueError(f'{nx} < {p}, need more samples.')
     covX = np.cov(X_.T)
     invcovX = np.linalg.pinv(covX)
@@ -43,7 +43,11 @@ def hotelling_ttest(X : np.array, to_alr=False):
     return t2, pval
 
 
+<<<<<<< HEAD:q2_matchmaker/_stats.py
 def spherical_test(X : np.array, p=0.95, center=True):
+=======
+def spherical_test(X: np.array, p=0.95, center=True):
+>>>>>>> c90db5ad2200aac412c3b8ec9c5c8f46ef056b7e:q2_matchmaker/_stats.py
     """ Fits a sphere that contains all of the points in X
     and tests to see if 0 is inside of that sphere.
 
@@ -62,13 +66,13 @@ def spherical_test(X : np.array, p=0.95, center=True):
         X_ = X
     muX = X_.mean(axis=0).reshape(1, -1)
     dists = cdist(X_, muX)
-    r = np.max(dists) / 2   # radius of sphere
-    #r = np.percentile(dists, p) / 2
+    r = np.percentile(dists, p) / 2  # radius of sphere
     p = np.zeros_like(muX)
     d = euclidean(muX, p)
     return d < r, r, d
 
 
+<<<<<<< HEAD:q2_matchmaker/_stats.py
 def effect_size(X : pd.DataFrame) -> pd.DataFrame:
     """ aldex2 style estimate of effect size. """
     y = x - x.mean(axis=0)   # CLR transform posterior
@@ -81,6 +85,10 @@ def effect_size(X : pd.DataFrame) -> pd.DataFrame:
     diffs['tstat'] = tt
     diffs['pvalue'] = pvals
     return diffs
+=======
+def rank_test(X: np.array):
+    """ Computes a cumulative rank test.
+>>>>>>> c90db5ad2200aac412c3b8ec9c5c8f46ef056b7e:q2_matchmaker/_stats.py
 
 
 def logodds_ranking(X : pd.DataFrame) -> pd.Series:

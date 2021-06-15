@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import argparse
 from dask_jobqueue import SLURMCluster
 from dask.distributed import Client
@@ -87,3 +88,67 @@ summary_stats.loc['r2'] = r2.values
 # samples.to_netcdf(posterior_file)
 # summary_stats.to_netcdf(summary_file)
 # rhat.to_netcdf(rhat_file)
+=======
+
+import numpy as np
+from q2_matchmaker._stan import NegativeBinomialCaseControl
+from q2_matchmaker._stan import _case_control_sim
+from biom import Table
+from birdman.diagnostics import r2_score
+import arviz as az
+from dask.distributed import Client, LocalCluster
+
+# from dask_jobqueue import SLURMCluster
+# import dask
+
+
+np.random.seed(0)
+table, metadata, diff = _case_control_sim(
+    n=200, d=20, depth=1000)
+
+
+biom_table = Table(table.values.T,
+                   list(table.columns),
+                   list(table.index))
+# cluster = SLURMCluster(cores=5,
+#                        processes=4,
+#                        memory='16GB',
+#                        walltime='01:00:00',
+#                        interface='ib0',
+#                        nanny=True,
+#                        death_timeout='300s',
+#                        local_directory='/scratch',
+#                        shebang='#!/usr/bin/env bash',
+#                        env_extra=["export TBB_CXX_TYPE=gcc"],
+#                        queue='ccb')
+
+dask_args = {'n_workers': 5, 'threads_per_worker': 2}
+cluster = LocalCluster(**dask_args)
+cluster.scale(dask_args['n_workers'])
+client = Client(cluster)
+
+nb = NegativeBinomialCaseControl(
+    table=biom_table,
+    matching_column="reps",
+    status_column="diff",
+    metadata=metadata,
+    reference_status='1',
+    num_warmup=1000,
+    mu_scale=1,
+    control_loc=-5,
+    control_scale=3,
+    chains=2,
+    seed=42)
+nb.compile_model()
+nb.fit_model()
+inf = nb.to_inference_object()
+loo = az.loo(inf)
+bfmi = az.bfmi(inf)
+rhat = az.rhat(inf, var_names=nb.param_names)
+ess = az.ess(inf, var_names=nb.param_names)
+r2 = r2_score(inf)
+print('loo', loo)
+print('bfmi', bfmi)
+print('rhat', rhat)
+print('r2', r2)
+>>>>>>> c90db5ad2200aac412c3b8ec9c5c8f46ef056b7e

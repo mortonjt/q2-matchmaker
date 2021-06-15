@@ -3,6 +3,7 @@ from q2_matchmaker.plugin_setup import plugin
 from q2_matchmaker._format import MatchingFormat
 
 
+<<<<<<< HEAD
 def _read_matching(fh):
     # Using `dtype=object` and `set_index` to avoid type casting/inference
     # of any columns or the index.
@@ -12,6 +13,8 @@ def _read_matching(fh):
     return df
 
 
+=======
+>>>>>>> c90db5ad2200aac412c3b8ec9c5c8f46ef056b7e
 @plugin.register_transformer
 def _106(ff: MatchingFormat) -> qiime2.Metadata:
     return qiime2.Metadata.load(str(ff))
@@ -22,6 +25,7 @@ def _107(obj: qiime2.Metadata) -> MatchingFormat:
     ff = MatchingFormat()
     obj.save(str(ff))
     return ff
+<<<<<<< HEAD
 
 
 @plugin.register_transformer
@@ -37,3 +41,5 @@ def _109(obj: pd.Series) -> MatchingFormat:
     with ff.open() as fh:
         obj.to_csv(fh, sep='\t', header=True)
     return ff
+=======
+>>>>>>> c90db5ad2200aac412c3b8ec9c5c8f46ef056b7e

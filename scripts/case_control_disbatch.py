@@ -47,6 +47,11 @@ if __name__ == '__main__':
               'and intermediate files.'),
         type=str, required=False, default='/scratch')
     parser.add_argument(
+        '--intermediate-directory',
+        help=('Scratch directory to deposit logs '
+              'and intermediate files.'),
+        type=str, required=True, default=None)
+    parser.add_argument(
         '--job-extra',
         help=('Additional job arguments, like loading modules.'),
         type=str, required=False, default=None)
@@ -98,7 +103,10 @@ if __name__ == '__main__':
                         f'--chains {args.chains} '
                         f'--output-tensor {args.local_directory}/{feature_id}.nc'
                         # slurm logs
-                        f' &> {args.local_directory}/{feature_id}.log\n')
+                        f' &> {args.local_directory}/{feature_id}.log; '
+                        f'cp {args.local_directory}/{feature_id}.nc '
+                        f'{args.intermediate_directory}/{feature_id}.nc\n'
+)
                 print(cmd_)
                 fh.write(cmd_)
         ## Run disBatch with the SLURM environmental parameters
@@ -115,7 +123,7 @@ if __name__ == '__main__':
             print("Output: \n{}\n".format(output))
 
     # Aggregate results
-    inference_files = [f'{args.local_directory}/{feature_id}.nc'
+    inference_files = [f'{args.intermediate_directory}/{feature_id}.nc'
                        for feature_id in counts.columns]
     inf_list = [az.from_netcdf(x) for x in inference_files]
     coords={'features' : counts.columns,

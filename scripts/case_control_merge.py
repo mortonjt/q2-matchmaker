@@ -29,7 +29,7 @@ if __name__ == '__main__':
 
     inf_list = [az.from_netcdf(x) for x in args.inference_files]
     coords={'features' : table.ids(axis='observation'),
+            'samples' : table.ids(axis='sample'),
             'monte_carlo_samples' : np.arange(args.monte_carlo_samples)}
     samples = merge_inferences(inf_list, 'y_predict', 'log_lhood', coords)
-
     samples.to_netcdf(args.output_inference)

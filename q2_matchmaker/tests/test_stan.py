@@ -76,37 +76,6 @@ class TestCaseControlSingle(unittest.TestCase):
                 (self.diff[i] <= (rm + 2 * rs))
             )
 
-    def test_cc_fit(self):
-        biom_table = Table(self.table.values.T,
-                           list(self.table.columns),
-                           list(self.table.index))
-        nb = NegativeBinomialCaseControl(
-            table=biom_table,
-            matching_column="reps",
-            status_column="diff",
-            metadata=self.metadata,
-            reference_status='1',
-            mu_scale=1,
-            sigma_scale=.1,
-            disp_scale=0.01,
-            # priors specific to the simulation
-            control_loc=-6,
-            control_scale=3,
-            chains=1,
-            seed=42)
-        nb.compile_model()
-        dask_args = {'n_workers': 1, 'threads_per_worker': 1}
-        cluster = LocalCluster(**dask_args)
-        cluster.scale(dask_args['n_workers'])
-        Client(cluster)
-        nb.fit_model()
-        samples = nb.to_inference_object()
-        exp = np.array([0] + list(self.diff))
-        res = samples['posterior']['diff'].mean(dim=['chain', 'draw'])
-        r, p = pearsonr(res, exp)
-        self.assertGreater(r, 0.3)
-        self.assertLess(p, 0.05)
-
 
 if __name__ == '__main__':
     unittest.main()

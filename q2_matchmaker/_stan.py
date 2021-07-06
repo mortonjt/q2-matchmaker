@@ -159,6 +159,12 @@ def _case_control_data(counts : np.array, case_ctrl_ids : np.array,
         'y' : counts.astype(int).tolist(),
         'cc_bool' : list(map(int, case_member)),
         'cc_ids' : list(map(int, case_ids + 1))
+        # priors
+        'mu_scale': 0,
+        'sigma_scale': 1,
+        'disp_scale': 1,
+        'control_loc': np.log(1/D),
+        'control_scale': 5
     }
     return dat
 
@@ -179,11 +185,18 @@ def _case_control_lognormal_data(
         'N' : N,
         'D' : D,
         'C' : int(max(case_ids) + 1),
+        'U' : int(np.min(counts))
         'y' : counts.astype(int).tolist(),
         'S' : sample_ids.astype(int).tolist(),
         'F' : feature_ids.astype(int).tolist(),
         'cc_bool' : list(map(int, case_member)),
-        'cc_ids' : list(map(int, case_ids + 1))
+        'cc_ids' : list(map(int, case_ids + 1)),
+        # priors
+        'mu_scale': 0,
+        'sigma_scale': 1,
+        'disp_scale': 1,
+        'control_loc': np.log(1/D),
+        'control_scale': 5
     }
     return dat
 

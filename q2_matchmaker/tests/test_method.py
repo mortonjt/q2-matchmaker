@@ -119,6 +119,34 @@ class TestNegativeBinomialCaseControl(unittest.TestCase):
         self.assertIsInstance(res, az.InferenceData)
 
 
+class TestLognormalCaseControl(unittest.TestCase):
+
+    def setUp(self):
+        np.random.seed(0)
+        self.N, self.D = 50, 3
+        self.table, self.metadata, self.diff = _case_control_sim(
+            n=self.N, d=self.D, depth=100)
+
+    def test_negative_binomial_case_control(self):
+        sids = [f's{i}' for i in range(self.N)]
+        biom_table = biom.Table(self.table.values.T,
+                                list(self.table.columns),
+                                list(self.table.index))
+        matchings = qiime2.CategoricalMetadataColumn(
+            pd.Series(list(map(str, self.metadata['reps'])),
+                      index=pd.Index(sids, name='id'),
+                      name='n'))
+        diffs = qiime2.CategoricalMetadataColumn(
+            pd.Series(list(map(str, self.metadata['diff'])),
+                      index=pd.Index(sids, name='id'),
+                      name='n'))
+        samples = lognormal_case_control(
+            biom_table,
+            matchings, diffs,
+            monte_carlo_samples = 100,
+            reference_group = '0')
+        self.assertIsInstance(res, az.InferenceData)
+
 
 if __name__ == '__main__':
     unittest.main()

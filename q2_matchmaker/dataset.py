@@ -11,6 +11,7 @@ import pytorch_lightning as pl
 
 class BiomMatchingDataset(Dataset):
     """Loads a `.biom` file.
+
     Parameters
     ----------
     filename : Path
@@ -32,7 +33,9 @@ class BiomMatchingDataset(Dataset):
             batch_column: str,
             label_column: str,
             reference_label: str,
-            match_column : str):
+            match_column : str,
+            dir_boot : bool,
+            pseudocount : int = 1):
         super(BiomDataset).__init__()
         if np.any(table.sum(axis='sample') <= 0):
             ValueError('Biom table has zero counts.')
@@ -41,6 +44,8 @@ class BiomMatchingDataset(Dataset):
         self.batch_column = batch_column
         self.match_column = match_column
         self.label_column = label_column
+        self.dir_boot = dir_boot
+        self.pc = pseudocount
 
         if 'Classification_Group' in [batch_column, match_column, label_columns]:
             raise ValueError('Classification_Group is a reserved keyword. '
@@ -94,9 +99,13 @@ class BiomMatchingDataset(Dataset):
         
         pair_md = self.m_dict[self.matchings[i]]
         trt_idx, ref_idx = pair_md.index[0], pair_md.index[1]
-        ref_counts = self.table.data(id=ref_idx, axis='sample')
-        trt_counts = self.table.data(id=trt_idx, axis='sample')        
-        batch_indices = self.batch_indices[i]        
+        ref_counts = self.table.data(id=ref_idx, axis='sample') + self.pc
+        trt_counts = self.table.data(id=trt_idx, axis='sample') + self.pc
+        batch_indices = self.batch_indices[i]
+        if self.dir_boot:
+            trt_counts = np.random.dirichlet(trt_counts)
+            ref_counts = np.random.dirichlet(ref_counts)
+            
         return trt_counts, ref_counts, batch_indices
 
     def __iter__(self):
@@ -120,8 +129,10 @@ class BiomMatchingDataset(Dataset):
                 yield self.__getitem__(i)
 
 def collate_match_f(batch):
+    
     trt_counts_list = np.vstack([b[0] for b in batch])
     ref_counts_list = np.vstack([b[1] for b in batch])
+    
     batch_list = np.vstack([b[2] for b in batch])
     
     trt_counts = torch.from_numpy(trt_counts_list).float()

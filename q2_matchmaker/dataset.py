@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-from numba import jit
-from sklearn.preprocessing import LabelEncoder
+from torch.utils.data import DataLoader
 import pytorch_lightning as pl
+import argparse
 
 
 class BiomMatchingDataset(Dataset):
@@ -33,10 +33,10 @@ class BiomMatchingDataset(Dataset):
             batch_column: str,
             label_column: str,
             reference_label: str,
-            match_column : str,
-            dir_boot : bool,
-            pseudocount : int = 1):
-        super(BiomDataset).__init__()
+            match_column: str,
+            dir_boot: bool,
+            pseudocount: int = 1):
+        super(BiomMatchingDataset).__init__()
         if np.any(table.sum(axis='sample') <= 0):
             ValueError('Biom table has zero counts.')
         self.table = table
@@ -47,7 +47,8 @@ class BiomMatchingDataset(Dataset):
         self.dir_boot = dir_boot
         self.pc = pseudocount
 
-        if 'Classification_Group' in [batch_column, match_column, label_columns]:
+        if 'Classification_Group' in [batch_column, match_column,
+                                      label_column]:
             raise ValueError('Classification_Group is a reserved keyword. '
                              'Double check your metadata.')
 
@@ -56,7 +57,7 @@ class BiomMatchingDataset(Dataset):
         filter_f = lambda v, i, m: i in ids
         self.table = self.table.filter(filter_f, axis='sample')
         self.metadata = self.metadata.loc[self.table.ids()]
-        
+
         # sort by match ids and labels
         cats = self.metadata[self.label_column] == reference_label
         self.metadata['Classification_Group'] = cats
@@ -84,7 +85,7 @@ class BiomMatchingDataset(Dataset):
     def __len__(self) -> int:
         return len(self.matchings)
 
-    def __getitem__(self, i):
+    def __getitem__(self, i : int):
         """ Returns all of the samples for a given matching
 
         Returns
@@ -133,7 +134,7 @@ def collate_match_f(batch):
     trt_counts_list = np.vstack([b[0] for b in batch])
     ref_counts_list = np.vstack([b[1] for b in batch])
     
-    batch_list = np.vstack([b[2] for b in batch])
+    batch_ids = np.vstack([b[2] for b in batch])
     
     trt_counts = torch.from_numpy(trt_counts_list).float()
     ref_counts = torch.from_numpy(ref_counts_list).float()    
@@ -167,17 +168,15 @@ class BiomMatchingDataModule(pl.LightningDataModule):
         train_filter = lambda v, i, m: i in train_idx
         val_filter = lambda v, i, m: i in test_idx
         
-        train_biom = biom_table.filter(train_filter, axis='sample', inplace=False)
-        val_biom = biom_table.filter(val_filter, axis='sample', inplace=False)        
-        self.train_biom = train_biom
-        self.val_biom = valid_biom
+        self.train_biom = biom_table.filter(train_filter, axis='sample', inplace=False)
+        self.val_biom = biom_table.filter(val_filter, axis='sample', inplace=False)
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.collate_f = collate_batch_f
 
     def train_dataloader(self):
-        train_dataset = BiomDataset(
-            load_table(self.train_biom),
+        train_dataset = BiomMatchingDataset(
+            self.train_biom,
             metadata=self.metadata, batch_category=self.batch_column)
         batch_size = min(len(train_dataset) // 2- 1, self.batch_size)
         train_dataloader = DataLoader(
@@ -188,8 +187,8 @@ class BiomMatchingDataModule(pl.LightningDataModule):
         return train_dataloader
 
     def val_dataloader(self):
-        val_dataset = BiomDataset(
-            load_table(self.val_biom),
+        val_dataset = BiomMatchingDataset(
+            self.val_biom,
             metadata=self.metadata, batch_category=self.batch_column)
         batch_size = min(len(val_dataset) // 2 - 1, self.batch_size)
         val_dataloader = DataLoader(

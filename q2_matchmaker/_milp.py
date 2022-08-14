@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.distributions import RelaxedOneHotCategorical
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import pytorch_lightning as pl
+import numpy as np
+import argparse
 
 
 NUM, NEUTRAL, DENOM = 0, 1, 2
@@ -32,12 +33,12 @@ class ConditionalBalanceClassifier(pl.LightningModule):
         ref_logs = torch.log(ref_counts)
         trt_parts = trt_logs * balance_argmax
         ref_parts = ref_logs * balance_argmax
-        trt_X = trt_parts[NUM].mean() - trt_parts[DENOM].mean()
-        ref_X = ref_parts[NUM].mean() - ref_parts[DENOM].mean()
+        trtX = trt_parts[NUM].mean() - trt_parts[DENOM].mean()
+        refX = ref_parts[NUM].mean() - ref_parts[DENOM].mean()
         # conditional logistic regression
-        log_prob = self.beta_c * trt_X + self.beta_b * batch_id + ofs 
-        log_prob -= torch.logsumexp(self.beta_c * trtX + self.beta_b * batch_id + ofs,
-                                    self.beta * refX + self.beta_b * batch_id + ofs)
+        log_prob = self.beta_c * trtX + self.beta_b * batch_id + ofs 
+        log_prob -= torch.logsumexp(self.beta_c * trtX + self.beta_b * batch_id + self.beta0,
+                                    self.beta * refX + self.beta_b * batch_id + self.beta0)
         return log_prob
         
     def training_step(self, batch, batch_idx):
@@ -73,7 +74,7 @@ class ConditionalBalanceClassifier(pl.LightningModule):
                    'val_accuracy']
         tensorboard_logs = {}
         for m in metrics:
-            losses = np.mean(list(map(lambda x: x['log'][m], outputs)))
+            meas = np.mean(list(map(lambda x: x['log'][m], outputs)))
             self.logger.experiment.add_scalar(m, meas, self.global_step)
             self.log(m, meas)
             tensorboard_logs[m] = meas

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import RelaxedOneHotCategorical
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import pytorch_lightning as pl
 
 
@@ -78,3 +79,23 @@ class ConditionalBalanceClassifier(pl.LightningModule):
             tensorboard_logs[m] = meas
         return {'val_loss': tensorboard_logs['val_loss'],
                 'log': tensorboard_logs}
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(
+            self.vae.parameters(), lr=self.hparams['learning_rate'],
+            weight_decay=0)
+        scheduler = CosineAnnealingWarmRestarts(
+            optimizer, T_0=2, T_mult=2)
+        return [optimizer], [scheduler]    
+
+    @staticmethod
+    def add_model_specific_args(parent_parser, add_help=True):
+        parser = argparse.ArgumentParser(parents=[parent_parser],
+                                         add_help=add_help)
+        parser.add_argument(
+            '--init-probs', help='Path of arviz file for initialization.',
+            required=False, type=str, default=1)
+        parser.add_argument(
+            '--learning-rate', help='Learning rate',
+            required=False, type=float, default=1e-3)
+        return parser

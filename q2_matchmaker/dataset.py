@@ -199,3 +199,50 @@ class BiomMatchingDataModule(pl.LightningDataModule):
             pin_memory=True)
         return val_dataloader
 
+    
+def add_data_specific_args(parent_parser, add_help=True):
+    parser = argparse.ArgumentParser(parents=[parent_parser],
+                                     add_help=add_help)
+    # Arguments specific for dataloaders
+    parser.add_argument(
+        '--biom-table', help='Biom table file', required=True)
+    parser.add_argument(
+        '--sample-metadata', help='Sample metadata file', required=True)
+    parser.add_argument(
+        '--batch-column',
+        help='Sample metadata column for batch effects.',
+        required=True, type=str)
+    parser.add_argument(
+        '--label-column',
+        help='Sample metadata column for class predictions.',
+        required=True, type=str)
+    parser.add_argument(
+        '--reference-label',
+        help='Reference category for classes.',
+        required=True, type=str)
+    parser.add_argument(
+        '--match-column',
+        help='Sample metadata column for match ids.',
+        required=True, type=str)
+    parser.add_argument(
+        '--dir-boot',
+        help='Specifies if dirichilet bootstrapping is used..',
+        action='store_true',
+        required=True, type=bool)
+    parser.set_defaults(dir_boot=True)
+    parser.add_argument(
+        '--pseudocount',
+        help='Pseudocount',
+        required=False, type=int, default=1)
+    parser.add_argument(
+        '--batch-size', help='Training batch size',
+        required=False, type=int, default=32)
+    # Arguments specific for trainer
+    parser.add_argument(
+        '--epochs',
+        help='Number of epochs (aka iterations) to train model.',
+        required=False, type=int, default=100)
+    parser.add_argument('--num-workers', type=int, default=1)
+    parser.add_argument('--gpus', type=int)
+    parser.add_argument('--output-directory', type=str, default=None)
+    return parser

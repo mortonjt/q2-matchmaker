@@ -21,7 +21,6 @@ class ConditionalBalanceClassifier(pl.LightningModule):
         self.beta_c = nn.Parameter([0.01])  # class slope
         self.beta_b = nn.Parameter([0.01])  # batch slope
         self.beta0 = nn.Parameter([0.01])   # intercept
-        
 
     def forward(self, trt_counts, ref_counts, batch_id, hard=False):
         # sample from one hot to obtain balances
@@ -36,15 +35,16 @@ class ConditionalBalanceClassifier(pl.LightningModule):
         trtX = trt_parts[NUM].mean() - trt_parts[DENOM].mean()
         refX = ref_parts[NUM].mean() - ref_parts[DENOM].mean()
         # conditional logistic regression
-        log_prob = self.beta_c * trtX + self.beta_b * batch_id + ofs 
-        log_prob -= torch.logsumexp(self.beta_c * trtX + self.beta_b * batch_id + self.beta0,
-                                    self.beta * refX + self.beta_b * batch_id + self.beta0)
+        log_prob = self.beta_c * trtX + self.beta_b * batch_id + ofs
+        log_prob -= torch.logsumexp(
+            self.beta_c * trtX + self.beta_b * batch_id + self.beta0,
+            self.beta * refX + self.beta_b * batch_id + self.beta0)
         return log_prob
-        
+
     def training_step(self, batch, batch_idx):
         trt, ref, batch_ids = [x.to(self.device) for x in batch]
         log_prob = self.forward(trt, ref, batch_ids)
-        loss = - torch.sum(log_prob)        
+        loss = - torch.sum(log_prob)
         current_lr = self.trainer.lr_schedulers[0]['scheduler'].get_last_lr()[0]
         tensorboard_logs = {'train_loss' : loss, 'lr' : current_lr}
         return {'loss': loss, 'log': tensorboard_logs}
@@ -54,20 +54,20 @@ class ConditionalBalanceClassifier(pl.LightningModule):
             trt, ref, batch_ids = [x.to(self.device) for x in batch]
             log_prob = self.forward(trt, ref, batch_ids)
             loss = - torch.sum(log_prob)
-            
+
             pred = self.forward(trt, ref, batch_ids, hard=True)
             separation = torch.mean(pred > 0)
-            
+
             ref_pred = self.forward(ref[::-1], ref, batch_ids, hard=True)
             acc = torch.mean(pred > ref_pred)
-            
+
             current_lr = self.trainer.lr_schedulers[0]['scheduler'].get_last_lr()[0]
             tensorboard_logs = {'val_loss' : loss,
                                 'val_separation' : separation,
                                 'val_accuracy' : acc,
                                 'lr' : current_lr}
             return {'loss': loss, 'log': tensorboard_logs}
-        
+
     def validation_epoch_end(self, outputs):
         metrics = ['val_loss',
                    'val_separation',
@@ -87,7 +87,7 @@ class ConditionalBalanceClassifier(pl.LightningModule):
             weight_decay=0)
         scheduler = CosineAnnealingWarmRestarts(
             optimizer, T_0=2, T_mult=2)
-        return [optimizer], [scheduler]    
+        return [optimizer], [scheduler]
 
     @staticmethod
     def add_model_specific_args(parent_parser, add_help=True):
@@ -95,8 +95,11 @@ class ConditionalBalanceClassifier(pl.LightningModule):
                                          add_help=add_help)
         parser.add_argument(
             '--init-probs', help='Path of arviz file for initialization.',
-            required=False, type=str, default=1)
+            required=False, type=str, default=None)
         parser.add_argument(
             '--learning-rate', help='Learning rate',
             required=False, type=float, default=1e-3)
+        parser.add_argument(
+            '--output-dir', help='Path to save all logging files and checkpoints',
+            required=True, type=str, default=None)
         return parser

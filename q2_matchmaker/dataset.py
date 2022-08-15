@@ -19,7 +19,7 @@ class BiomMatchingDataset(Dataset):
     metadata_file : Path
         Filepath to sample metadata
     batch_category : str
-        Column name forr batch indices
+        Column name for batch indices
 
     Notes
     -----
@@ -63,13 +63,13 @@ class BiomMatchingDataset(Dataset):
         self.metadata['Classification_Group'] = cats
         self.metadata = self.metadata.sort_values(
             by=[self.label_column, self.match_column])
-        
+
         if self.metadata.index.name is None:
             raise ValueError('`Index` must have a name either'
                              '`sampleid`, `sample-id` or #SampleID')
         self.index_name = self.metadata.index.name
         self.metadata = self.metadata.reset_index()
-        
+
         batch_cats = self.metadata[self.batch_column].unique()
         self.batch_cats = pd.Series(
             np.arange(len(batch_cats)), index=batch_cats)
@@ -80,7 +80,7 @@ class BiomMatchingDataset(Dataset):
         self.matchings = self.metadata[self.match_column].unique()
         self.m_dict = dict(list(self.metadata.groupby(self.match_column)))
         self.Ndata = len(self.matchings)
-        
+
 
     def __len__(self) -> int:
         return len(self.matchings)
@@ -97,7 +97,7 @@ class BiomMatchingDataset(Dataset):
         batch_indices : np.array
             Membership ids for batch samples. If not specified, return None.
         """
-        
+
         pair_md = self.m_dict[self.matchings[i]]
         trt_idx, ref_idx = pair_md.index[0], pair_md.index[1]
         ref_counts = self.table.data(id=ref_idx, axis='sample') + self.pc
@@ -106,7 +106,7 @@ class BiomMatchingDataset(Dataset):
         if self.dir_boot:
             trt_counts = np.random.dirichlet(trt_counts)
             ref_counts = np.random.dirichlet(ref_counts)
-            
+
         return trt_counts, ref_counts, batch_indices
 
     def __iter__(self):
@@ -130,20 +130,20 @@ class BiomMatchingDataset(Dataset):
                 yield self.__getitem__(i)
 
 def collate_match_f(batch):
-    
+
     trt_counts_list = np.vstack([b[0] for b in batch])
     ref_counts_list = np.vstack([b[1] for b in batch])
-    
+
     batch_ids = np.vstack([b[2] for b in batch])
-    
+
     trt_counts = torch.from_numpy(trt_counts_list).float()
-    ref_counts = torch.from_numpy(ref_counts_list).float()    
+    ref_counts = torch.from_numpy(ref_counts_list).float()
     batch_ids = torch.from_numpy(batch_ids).long()
     return trt_counts, ref_counts, batch_ids.squeeze()
 
 
 class BiomMatchingDataModule(pl.LightningDataModule):
-    """ 
+    """
     Notes
     -----
     Assumes that `train_column` has values True and False
@@ -154,7 +154,7 @@ class BiomMatchingDataModule(pl.LightningDataModule):
                  label_column : str,
                  reference_label : str,
                  batch_column : str,
-                 train_column : str,                 
+                 train_column : str,
                  batch_size : int = 10,
                  num_workers : int = 1):
         super().__init__()
@@ -162,12 +162,12 @@ class BiomMatchingDataModule(pl.LightningDataModule):
         self.batch_column = batch_column
         self.label_column = label_column
         self.reference_label = reference_label
-                
+
         train_idx = set(metadata.loc[metadata[train_column]].index)
-        test_idx = set(metadata.loc[metadata[train_column]].index)        
+        test_idx = set(metadata.loc[metadata[train_column]].index)
         train_filter = lambda v, i, m: i in train_idx
         val_filter = lambda v, i, m: i in test_idx
-        
+
         self.train_biom = biom_table.filter(train_filter, axis='sample', inplace=False)
         self.val_biom = biom_table.filter(val_filter, axis='sample', inplace=False)
         self.batch_size = batch_size
@@ -198,7 +198,7 @@ class BiomMatchingDataModule(pl.LightningDataModule):
             pin_memory=True)
         return val_dataloader
 
-    
+
 def add_data_specific_args(parent_parser, add_help=True):
     parser = argparse.ArgumentParser(parents=[parent_parser],
                                      add_help=add_help)
@@ -210,6 +210,11 @@ def add_data_specific_args(parent_parser, add_help=True):
     parser.add_argument(
         '--batch-column',
         help='Sample metadata column for batch effects.',
+        required=True, type=str)
+    parser.add_argument(
+        '--train-column',
+        help=('Specifies training and testing samples '
+              '(must be labeled `train` and `test`).'),
         required=True, type=str)
     parser.add_argument(
         '--label-column',

@@ -51,7 +51,7 @@ class ConditionalBalanceClassifier(pl.LightningModule):
         trt_logprob = self.beta_c * trtX + ofs
         ref_logprob = self.beta_c * refX + ofs
         stack_prob = torch.stack((trt_logprob, ref_logprob))
-        log_prob = trt_logprob + torch.logsumexp(stack_prob, dim=0)
+        log_prob = trt_logprob - torch.logsumexp(stack_prob, dim=0)
         return log_prob
 
     def training_step(self, batch, batch_idx):

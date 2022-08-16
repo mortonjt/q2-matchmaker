@@ -68,7 +68,7 @@ class BiomDataset(Dataset):
             raise ValueError('`Index` must have a name either'
                              '`sampleid`, `sample-id` or #SampleID')
         self.index_name = self.metadata.index.name
-        self.metadata = self.metadata.reset_index()
+        #self.metadata = self.metadata.reset_index()
 
         batch_cats = self.metadata[self.batch_column].unique()
         self.batch_cats = pd.Series(
@@ -77,10 +77,11 @@ class BiomDataset(Dataset):
             list(map(lambda x: self.batch_cats.loc[x],
                      self.metadata[self.batch_column].values)))
         # match ids
-        self.matchings = self.metadata[self.match_column].unique()
+        self.matchings = pd.Series(
+            self.metadata[self.match_column].unique(),
+            index=np.arange(len(self.metadata[self.match_column].unique())))
         self.m_dict = dict(list(self.metadata.groupby(self.match_column)))
         self.Ndata = len(self.matchings)
-
 
     def __len__(self) -> int:
         return len(self.matchings)
@@ -97,8 +98,7 @@ class BiomDataset(Dataset):
         batch_indices : np.array
             Membership ids for batch samples. If not specified, return None.
         """
-
-        pair_md = self.m_dict[self.matchings[i]]
+        pair_md = self.m_dict[self.matchings.loc[i]]
         trt_idx, ref_idx = pair_md.index[0], pair_md.index[1]
         ref_counts = self.table.data(id=ref_idx, axis='sample') + self.pc
         trt_counts = self.table.data(id=trt_idx, axis='sample') + self.pc
@@ -184,8 +184,9 @@ class BiomDataModule(pl.LightningDataModule):
             match_column=self.match_column,
             reference_label=self.reference_label
         )
-        #batch_size = max(1, min(len(train_dataset) // 2 - 1, self.batch_size))
-        batch_size = self.batch_size
+
+        batch_size = min(len(train_dataset) // 2 - 1, self.batch_size)
+        assert batch_size > 1
         train_dataloader = DataLoader(
             train_dataset, batch_size=batch_size,
             collate_fn=self.collate_f, shuffle=True,
@@ -201,8 +202,8 @@ class BiomDataModule(pl.LightningDataModule):
             label_column=self.label_column,
             match_column=self.match_column,
             reference_label=self.reference_label)
-        #batch_size = max(1, min(len(val_dataset) // 2 - 1, self.batch_size))
-        batch_size = self.batch_size
+        batch_size = min(len(val_dataset) // 2 - 1, self.batch_size)
+        assert batch_size > 1
         val_dataloader = DataLoader(
             val_dataset, batch_size=batch_size,
             collate_fn=self.collate_f, shuffle=False,

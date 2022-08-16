@@ -8,19 +8,19 @@ from pytorch_lightning import Trainer
 
 
 class TestMILP(unittest.TestCase):
-    N = 20
+    N = 40
     D = 10
     obs = [f'o{i}' for i in range(D)]
     sam = [f's{i}' for i in range(N)]
-    table = biom.Table(np.random.randn(D, N), obs, sam)
+    table = biom.Table(np.exp(np.random.randn(D, N)).round(), obs, sam)
 
     metadata = pd.DataFrame(
         {
-            'batch': np.arange(20) % 3,
-            'label': np.arange(20) % 2,
-            'match': list(range(5)) + list(range(5)) + list(range(5)) + list(range(5)),
-            'train': ['Train'] * 10 + ['Test'] * 10
-        }
+            'batch': np.arange(N) % 3,
+            'label': np.arange(N) % 2,
+            'match': list(range(N // 4)) * 4,
+            'train': ['Train'] * (N // 2) + ['Test'] * (N // 2)
+        }, index=sam
     )
     metadata.index.name = 'sampleid'
     dm = BiomDataModule(table, metadata,
@@ -31,6 +31,8 @@ class TestMILP(unittest.TestCase):
                         train_column='train',
                         batch_size=5,
                         num_workers=1)
+    print(len(dm.train_dataloader()))
+    print(len(dm.val_dataloader()))
     model = ConditionalBalanceClassifier(D)
     trainer = Trainer(
         max_epochs=1,

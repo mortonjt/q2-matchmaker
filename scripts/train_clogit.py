@@ -1,9 +1,12 @@
+import os
 import biom
 import pandas as pd
 from q2_matchmaker._milp import ConditionalBalanceClassifier
-from q2_matchmaker.dataset import BiomDataModule
+from q2_matchmaker.dataset import BiomDataModule, add_data_specific_args
+from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning import loggers as pl_loggers
+import yaml
 import argparse
 
 
@@ -16,12 +19,12 @@ def main(args):
                         reference_label=args.reference_label,
                         batch_column=args.batch_column,
                         train_column=args.train_column,
-                        batch_size=batch_size,
-                        num_workers=num_workers)
+                        batch_size=args.batch_size,
+                        num_workers=args.num_workers)
     # TODO : enable init probs later
-    model = ConditionalBalanceClassifier(input_dim, init_probs=None,
-                                         temp=0.1, args.learning_rate)
-
+    model = ConditionalBalanceClassifier(args.input_dim, init_probs=None,
+                                         temp=0.1, learning_rate=args.learning_rate)
+    ckpt_path = os.path.join(args.output_directory, "checkpoints")
     checkpoint_callback = ModelCheckpoint(
         dirpath=ckpt_path,
         period=1,
@@ -41,14 +44,12 @@ def main(args):
         stochastic_weight_avg=False,
         check_val_every_n_epoch=10,
         gradient_clip_val=args.grad_clip,
-        profiler=profiler,
         logger=tb_logger,
         callbacks=[checkpoint_callback])
 
     trainer.fit(model, dm)
     trainer.save_checkpoint(
         args.output_directory + '/last_ckpt.pt')
-
 
 
 if __name__ == '__main__':

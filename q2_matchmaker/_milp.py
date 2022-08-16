@@ -11,16 +11,18 @@ NUM, NEUTRAL, DENOM = 0, 1, 2
 
 
 class ConditionalBalanceClassifier(pl.LightningModule):
-    def __init__(self, input_dim, init_probs=None, temp=0.1, lr=1e-3):
+    def __init__(self, input_dim, init_probs=None, temp=0.1, learning_rate=1e-3):
+        super(ConditionalBalanceClassifier, self).__init__()
         self.save_hyperparameters()
         if init_probs is not None:
             self.logits = nn.Parameter(init_probs)
         else:
             self.logits = nn.Parameter(torch.ones((input_dim, 3)))
         self.dist = RelaxedOneHotCategorical(logits=self.logits, temperature=temp)
-        self.beta_c = nn.Parameter([0.01])  # class slope
-        self.beta_b = nn.Parameter([0.01])  # batch slope
-        self.beta0 = nn.Parameter([0.01])   # intercept
+        self.beta_c = nn.Parameter(torch.Tensor([0.01]))  # class slope
+        self.beta_b = nn.Parameter(torch.Tensor([0.01]))  # batch slope
+        self.beta0 = nn.Parameter(torch.Tensor([0.01]))   # intercept
+        self.lr = learning_rate
 
     def forward(self, trt_counts, ref_counts, batch_id, hard=False):
         # sample from one hot to obtain balances
@@ -83,7 +85,7 @@ class ConditionalBalanceClassifier(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
-            self.vae.parameters(), lr=self.hparams['learning_rate'],
+            self.parameters(), lr=self.hparams['learning_rate'],
             weight_decay=0)
         scheduler = CosineAnnealingWarmRestarts(
             optimizer, T_0=2, T_mult=2)

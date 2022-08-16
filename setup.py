@@ -37,8 +37,8 @@ setup(name='q2-matchmaker',
           'xarray',
           'arviz',
           'matplotlib',
-          'pytorch',
-          'pytorch-lightning'
+          #'pytorch',
+          #'pytorch-lightning'
       ],
       entry_points={
           'qiime2.plugins': ['q2-matchmaker=q2_matchmaker.plugin_setup:plugin']

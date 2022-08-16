@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 import argparse
 
 
-class BiomMatchingDataset(Dataset):
+class BiomDataset(Dataset):
     """Loads a `.biom` file.
 
     Parameters
@@ -34,9 +34,9 @@ class BiomMatchingDataset(Dataset):
             label_column: str,
             reference_label: str,
             match_column: str,
-            dir_boot: bool,
+            dir_boot: bool = True,
             pseudocount: int = 1):
-        super(BiomMatchingDataset).__init__()
+        super(BiomDataset).__init__()
         if np.any(table.sum(axis='sample') <= 0):
             ValueError('Biom table has zero counts.')
         self.table = table
@@ -142,7 +142,7 @@ def collate_match_f(batch):
     return trt_counts, ref_counts, batch_ids.squeeze()
 
 
-class BiomMatchingDataModule(pl.LightningDataModule):
+class BiomDataModule(pl.LightningDataModule):
     """
     Notes
     -----
@@ -158,13 +158,14 @@ class BiomMatchingDataModule(pl.LightningDataModule):
                  batch_size : int = 10,
                  num_workers : int = 1):
         super().__init__()
+        self.metadata = metadata
         self.match_column = match_column
         self.batch_column = batch_column
         self.label_column = label_column
         self.reference_label = reference_label
 
-        train_idx = set(metadata.loc[metadata[train_column]].index)
-        test_idx = set(metadata.loc[metadata[train_column]].index)
+        train_idx = set(metadata.loc[metadata[train_column] == 'Train'].index)
+        test_idx = set(metadata.loc[metadata[train_column] == 'Test'].index)
         train_filter = lambda v, i, m: i in train_idx
         val_filter = lambda v, i, m: i in test_idx
 
@@ -172,12 +173,16 @@ class BiomMatchingDataModule(pl.LightningDataModule):
         self.val_biom = biom_table.filter(val_filter, axis='sample', inplace=False)
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.collate_f = collate_batch_f
+        self.collate_f = collate_match_f
 
     def train_dataloader(self):
-        train_dataset = BiomMatchingDataset(
+        train_dataset = BiomDataset(
             self.train_biom,
-            metadata=self.metadata, batch_category=self.batch_column)
+            metadata=self.metadata,
+            batch_column=self.batch_column,
+            label_column=self.label_column,
+            match_column=self.match_column,
+        )
         batch_size = min(len(train_dataset) // 2- 1, self.batch_size)
         train_dataloader = DataLoader(
             train_dataset, batch_size=batch_size,
@@ -187,9 +192,12 @@ class BiomMatchingDataModule(pl.LightningDataModule):
         return train_dataloader
 
     def val_dataloader(self):
-        val_dataset = BiomMatchingDataset(
+        val_dataset = BiomDataset(
             self.val_biom,
-            metadata=self.metadata, batch_category=self.batch_column)
+            metadata=self.metadata,
+            batch_column=self.batch_column,
+            label_column=self.label_column,
+            match_column=self.match_column)
         batch_size = min(len(val_dataset) // 2 - 1, self.batch_size)
         val_dataloader = DataLoader(
             val_dataset, batch_size=batch_size,

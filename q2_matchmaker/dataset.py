@@ -182,8 +182,10 @@ class BiomDataModule(pl.LightningDataModule):
             batch_column=self.batch_column,
             label_column=self.label_column,
             match_column=self.match_column,
+            reference_label=self.reference_label
         )
-        batch_size = min(len(train_dataset) // 2- 1, self.batch_size)
+        #batch_size = max(1, min(len(train_dataset) // 2 - 1, self.batch_size))
+        batch_size = self.batch_size
         train_dataloader = DataLoader(
             train_dataset, batch_size=batch_size,
             collate_fn=self.collate_f, shuffle=True,
@@ -197,8 +199,10 @@ class BiomDataModule(pl.LightningDataModule):
             metadata=self.metadata,
             batch_column=self.batch_column,
             label_column=self.label_column,
-            match_column=self.match_column)
-        batch_size = min(len(val_dataset) // 2 - 1, self.batch_size)
+            match_column=self.match_column,
+            reference_label=self.reference_label)
+        #batch_size = max(1, min(len(val_dataset) // 2 - 1, self.batch_size))
+        batch_size = self.batch_size
         val_dataloader = DataLoader(
             val_dataset, batch_size=batch_size,
             collate_fn=self.collate_f, shuffle=False,

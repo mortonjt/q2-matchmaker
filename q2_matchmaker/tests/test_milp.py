@@ -22,6 +22,7 @@ class TestMILP(unittest.TestCase):
             'train': ['Train'] * 10 + ['Test'] * 10
         }
     )
+    metadata.index.name = 'sampleid'
     dm = BiomDataModule(table, metadata,
                         match_column='match',
                         label_column='label',

@@ -243,10 +243,9 @@ def add_data_specific_args(parent_parser, add_help=True):
         required=True, type=str)
     parser.add_argument(
         '--dir-boot',
-        help='Specifies if dirichilet bootstrapping is used..',
-        action='store_true',
-        required=True, type=bool)
-    parser.set_defaults(dir_boot=True)
+        help='Specifies if dirichilet bootstrapping is used.',
+        action='store_true', required=False)
+    parser.set_defaults(dir_boot=False)
     parser.add_argument(
         '--pseudocount',
         help='Pseudocount',

@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+from sklearn.preprocessing import OneHotEncoder
 import pytorch_lightning as pl
 import argparse
 
@@ -46,6 +47,8 @@ class BiomDataset(Dataset):
         self.label_column = label_column
         self.dir_boot = dir_boot
         self.pc = pseudocount
+        self.onehoter = OneHotEncoder(sparse=False).fit(
+            metadata[batch_column].values.reshape(-1, 1))
 
         if 'Classification_Group' in [batch_column, match_column,
                                       label_column]:
@@ -70,12 +73,6 @@ class BiomDataset(Dataset):
         self.index_name = self.metadata.index.name
         #self.metadata = self.metadata.reset_index()
 
-        batch_cats = self.metadata[self.batch_column].unique()
-        self.batch_cats = pd.Series(
-            np.arange(len(batch_cats)), index=batch_cats)
-        self.batch_indices = np.array(
-            list(map(lambda x: self.batch_cats.loc[x],
-                     self.metadata[self.batch_column].values)))
         # match ids
         self.matchings = pd.Series(
             self.metadata[self.match_column].unique(),
@@ -102,12 +99,13 @@ class BiomDataset(Dataset):
         trt_idx, ref_idx = pair_md.index[0], pair_md.index[1]
         ref_counts = self.table.data(id=ref_idx, axis='sample') + self.pc
         trt_counts = self.table.data(id=trt_idx, axis='sample') + self.pc
-        batch_indices = self.batch_indices[i]
+        ref_batch = self.onehoter.transform([[pair_md.loc[ref_idx, self.batch_column]]])
+        trt_batch = self.onehoter.transform([[pair_md.loc[trt_idx, self.batch_column]]])
         if self.dir_boot:
             trt_counts = np.random.dirichlet(trt_counts)
             ref_counts = np.random.dirichlet(ref_counts)
 
-        return trt_counts, ref_counts, batch_indices
+        return trt_counts, ref_counts, trt_batch, ref_batch
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
@@ -134,12 +132,14 @@ def collate_match_f(batch):
     trt_counts_list = np.vstack([b[0] for b in batch])
     ref_counts_list = np.vstack([b[1] for b in batch])
 
-    batch_ids = np.vstack([b[2] for b in batch])
+    trt_batch = np.vstack([b[2] for b in batch])
+    ref_batch = np.vstack([b[3] for b in batch])
 
     trt_counts = torch.from_numpy(trt_counts_list).float()
     ref_counts = torch.from_numpy(ref_counts_list).float()
-    batch_ids = torch.from_numpy(batch_ids).long()
-    return trt_counts, ref_counts, batch_ids.squeeze()
+    trt_batch = torch.from_numpy(trt_batch).float()
+    ref_batch = torch.from_numpy(ref_batch).float()
+    return trt_counts, ref_counts, trt_batch, ref_batch
 
 
 class BiomDataModule(pl.LightningDataModule):

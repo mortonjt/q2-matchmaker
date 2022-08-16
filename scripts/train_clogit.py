@@ -13,6 +13,8 @@ import argparse
 def main(args):
     table = biom.load_table(args.biom_table)
     metadata = pd.read_table(args.sample_metadata, index_col=0)
+    C = len(metadata[args.batch_column].unique())
+    D = table.shape[0]
     dm = BiomDataModule(table, metadata,
                         match_column=args.match_column,
                         label_column=args.label_column,
@@ -22,7 +24,7 @@ def main(args):
                         batch_size=args.batch_size,
                         num_workers=args.num_workers)
     # TODO : enable init probs later
-    model = ConditionalBalanceClassifier(args.input_dim, init_probs=None,
+    model = ConditionalBalanceClassifier(D, C, init_probs=None,
                                          temp=0.1, learning_rate=args.learning_rate)
     ckpt_path = os.path.join(args.output_directory, "checkpoints")
     checkpoint_callback = ModelCheckpoint(

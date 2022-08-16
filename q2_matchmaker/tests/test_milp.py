@@ -10,6 +10,7 @@ from pytorch_lightning import Trainer
 class TestMILP(unittest.TestCase):
     N = 40
     D = 10
+    C = 3
     obs = [f'o{i}' for i in range(D)]
     sam = [f's{i}' for i in range(N)]
     table = biom.Table(np.exp(np.random.randn(D, N)).round(), obs, sam)
@@ -31,9 +32,7 @@ class TestMILP(unittest.TestCase):
                         train_column='train',
                         batch_size=5,
                         num_workers=1)
-    print(len(dm.train_dataloader()))
-    print(len(dm.val_dataloader()))
-    model = ConditionalBalanceClassifier(D)
+    model = ConditionalBalanceClassifier(D, C)
     trainer = Trainer(
         max_epochs=1,
         check_val_every_n_epoch=1)

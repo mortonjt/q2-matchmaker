@@ -11,7 +11,7 @@ NUM, NEUTRAL, DENOM = 0, 1, 2
 
 
 class ConditionalBalanceClassifier(pl.LightningModule):
-    def __init__(self, input_dim, init_probs=None, temp=0.1, learning_rate=1e-3):
+    def __init__(self, input_dim, cat_dim, init_probs=None, temp=0.1, learning_rate=1e-3):
         # TODO: add option to specify ILR or SLR
         super(ConditionalBalanceClassifier, self).__init__()
         self.save_hyperparameters()
@@ -20,12 +20,12 @@ class ConditionalBalanceClassifier(pl.LightningModule):
         else:
             self.logits = nn.Parameter(torch.ones((input_dim, 3)))
         self.dist = RelaxedOneHotCategorical(logits=self.logits, temperature=temp)
-        self.beta_c = nn.Parameter(torch.Tensor([0.01]))  # class slope
+        self.beta_c = nn.Parameter(torch.zeros(cat_dim))  # class slope
         self.beta_b = nn.Parameter(torch.Tensor([0.01]))  # batch slope
         self.beta0 = nn.Parameter(torch.Tensor([0.01]))   # intercept
         self.lr = learning_rate
 
-    def forward(self, trt_counts, ref_counts, batch_id, hard=False):
+    def forward(self, trt_counts, ref_counts, trt_batch, ref_batch, hard=False):
         # sample from one hot to obtain balances
         if hard:
             x = self.dist.sample()
@@ -47,16 +47,17 @@ class ConditionalBalanceClassifier(pl.LightningModule):
         refX = torch.mean(ref_num) - torch.mean(ref_denom)
 
         # conditional logistic regression
-        ofs = self.beta_b * batch_id + self.beta0
-        trt_logprob = self.beta_c * trtX + ofs
-        ref_logprob = self.beta_c * refX + ofs
+        trt_ofs = trt_batch @ self.beta_c + self.beta0
+        ref_ofs = ref_batch @ self.beta_c + self.beta0
+        trt_logprob = self.beta_b * trtX + trt_ofs
+        ref_logprob = self.beta_b * refX + ref_ofs
         stack_prob = torch.stack((trt_logprob, ref_logprob))
         log_prob = trt_logprob - torch.logsumexp(stack_prob, dim=0)
         return log_prob
 
     def training_step(self, batch, batch_idx):
-        trt, ref, batch_ids = [x.to(self.device) for x in batch]
-        log_prob = self.forward(trt, ref, batch_ids)
+        trt, ref, trt_batch, ref_batch = [x.to(self.device) for x in batch]
+        log_prob = self.forward(trt, ref, trt_batch, ref_batch)
         loss = - torch.sum(log_prob)
         current_lr = self.trainer.lr_schedulers[0]['scheduler'].get_last_lr()[0]
         tensorboard_logs = {'train_loss' : loss, 'lr' : current_lr}
@@ -64,14 +65,14 @@ class ConditionalBalanceClassifier(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         with torch.no_grad():
-            trt, ref, batch_ids = [x.to(self.device) for x in batch]
-            log_prob = self.forward(trt, ref, batch_ids)
+            trt, ref, trt_batch, ref_batch = [x.to(self.device) for x in batch]
+            log_prob = self.forward(trt, ref, trt_batch, ref_batch)
             loss = - torch.sum(log_prob)
 
-            pred = self.forward(trt, ref, batch_ids, hard=True)
+            pred = self.forward(trt, ref, trt_batch, ref_batch, hard=True)
             separation = torch.mean((pred > 0).float())
             idx = torch.randperm(len(ref))
-            ref_pred = self.forward(ref[idx], ref, batch_ids, hard=True)
+            ref_pred = self.forward(ref[idx], ref, trt_batch, ref_batch, hard=True)
             acc = torch.mean((pred > ref_pred).float())
 
             current_lr = self.trainer.lr_schedulers[0]['scheduler'].get_last_lr()[0]

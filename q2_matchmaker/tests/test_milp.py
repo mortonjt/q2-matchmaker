@@ -2,7 +2,7 @@ import unittest
 import biom
 import pandas as pd
 import numpy as np
-from q2_matchmaker._milp import ConditionalBalanceClassifier
+from q2_matchmaker._milp import ConditionalBalanceClassifier, BalanceClassifier
 from q2_matchmaker.dataset import BiomDataModule
 from pytorch_lightning import Trainer
 
@@ -32,7 +32,7 @@ class TestMILP(unittest.TestCase):
                         train_column='train',
                         batch_size=5,
                         num_workers=1)
-    model = ConditionalBalanceClassifier(D, C)
+    model = BalanceClassifier(D, C)
     trainer = Trainer(
         max_epochs=1,
         check_val_every_n_epoch=1)

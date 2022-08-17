@@ -13,6 +13,7 @@ import argparse
 def main(args):
     table = biom.load_table(args.biom_table)
     metadata = pd.read_table(args.sample_metadata, index_col=0)
+    print('Before', table.shape, metadata.shape)
     C = len(metadata[args.batch_column].unique())
     D = table.shape[0]
     dm = BiomDataModule(table, metadata,
@@ -23,9 +24,11 @@ def main(args):
                         train_column=args.train_column,
                         batch_size=args.batch_size,
                         num_workers=args.num_workers)
+
     # TODO : enable init probs later
     model = BalanceClassifier(D, C, init_probs=None,
                               temp=0.1, learning_rate=args.learning_rate)
+
     # ckpt_path = os.path.join(args.output_directory, "checkpoints")
     # checkpoint_callback = ModelCheckpoint(
     #     dirpath=ckpt_path,
@@ -39,7 +42,6 @@ def main(args):
     # save hyper-parameters to yaml file
     with open(f'{args.output_directory}/hparams.yaml', 'w') as outfile:
         yaml.dump(model._hparams, outfile, default_flow_style=False)
-
 
     trainer = Trainer(
         max_epochs=args.epochs,

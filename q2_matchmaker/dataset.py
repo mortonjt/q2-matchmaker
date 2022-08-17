@@ -60,7 +60,7 @@ class BiomDataset(Dataset):
         filter_f = lambda v, i, m: i in ids
         self.table = self.table.filter(filter_f, axis='sample')
         self.metadata = self.metadata.loc[self.table.ids()]
-
+        print('After', table.shape, self.metadata.shape)
         # sort by match ids and labels
         cats = self.metadata[self.label_column] == reference_label
         self.metadata['Classification_Group'] = cats
@@ -185,10 +185,8 @@ class BiomDataModule(pl.LightningDataModule):
             reference_label=self.reference_label
         )
 
-        batch_size = min(len(train_dataset) // 2 - 1, self.batch_size)
-        assert batch_size > 1
         train_dataloader = DataLoader(
-            train_dataset, batch_size=batch_size,
+            train_dataset, batch_size=self.batch_size,
             collate_fn=self.collate_f, shuffle=True,
             num_workers=self.num_workers, drop_last=True,
             pin_memory=True)
@@ -202,10 +200,8 @@ class BiomDataModule(pl.LightningDataModule):
             label_column=self.label_column,
             match_column=self.match_column,
             reference_label=self.reference_label)
-        batch_size = min(len(val_dataset) // 2 - 1, self.batch_size)
-        assert batch_size > 1
         val_dataloader = DataLoader(
-            val_dataset, batch_size=batch_size,
+            val_dataset, batch_size=self.batch_size,
             collate_fn=self.collate_f, shuffle=False,
             num_workers=self.num_workers, drop_last=True,
             pin_memory=True)

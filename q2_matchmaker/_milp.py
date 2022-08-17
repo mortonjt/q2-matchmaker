@@ -54,7 +54,9 @@ class BalanceClassifier(pl.LightningModule):
         ref_ofs = ref_batch @ self.beta_c + self.beta0
         trt_logprob = self.beta_b * trtX + trt_ofs
         ref_logprob = self.beta_b * refX + ref_ofs
-        return torch.cat((trt_logprob, ref_logprob))
+        res = torch.cat((trt_logprob, ref_logprob))
+        print('res', res.shape, trt_counts.shape, ref_counts.shape)
+        return res
 
     def logprob(self, trt_counts, ref_counts, trt_batch, ref_batch):
         outputs = self.forward(trt_counts, ref_counts, trt_batch, ref_batch)
@@ -62,11 +64,10 @@ class BalanceClassifier(pl.LightningModule):
         ref_logprob = outputs[:len(ref_counts)]
         N = len(trt_logprob)
         o = torch.ones(N, device=trt_counts.device)
-        z = torch.ones(N, device=trt_counts.device)
-        return - (
-            F.binary_cross_entropy(trt_logprob, o) +
-            F.binary_cross_entropy(ref_logprob, z)
-        )
+        z = torch.zeros(N, device=trt_counts.device)
+        lp = F.binary_cross_entropy(trt_logprob, o)
+        lp += F.binary_cross_entropy(ref_logprob, z)
+        return lp
 
     def training_step(self, batch, batch_idx):
         self.train()
@@ -77,7 +78,8 @@ class BalanceClassifier(pl.LightningModule):
         print('training_step', loss)
         current_lr = self.trainer.lr_schedulers[0]['scheduler'].get_last_lr()[0]
         tensorboard_logs = {'train_loss' : loss, 'lr' : current_lr}
-        return {'loss': loss, 'log': tensorboard_logs}
+        return loss
+        #return {'loss': loss, 'log': tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
         with torch.no_grad():
@@ -100,6 +102,8 @@ class BalanceClassifier(pl.LightningModule):
                                 # 'val_accuracy' : acc,
                                 'lr' : current_lr}
             return {'loss': loss, 'log': tensorboard_logs}
+            # return loss
+
 
     def validation_epoch_end(self, outputs):
         metrics = [
@@ -141,7 +145,8 @@ class BalanceClassifier(pl.LightningModule):
 class ConditionalBalanceClassifier(BalanceClassifier):
     def __init__(self, input_dim, cat_dim, init_probs=None, temp=0.1, learning_rate=1e-3):
         # TODO: add option to specify ILR or SLR
-        super(ConditionalBalanceClassifier, self).__init__(input_dim, cat_dim, init_probs, temp, learning_rate)
+        super(ConditionalBalanceClassifier, self).__init__(
+            input_dim, cat_dim, init_probs, temp, learning_rate)
         self.save_hyperparameters()
         if init_probs is not None:
             self.logits = nn.Parameter(init_probs)

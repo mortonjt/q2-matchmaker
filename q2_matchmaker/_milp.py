@@ -131,8 +131,8 @@ class BalanceClassifier(pl.LightningModule):
             self.log(m, meas)
             tensorboard_logs[m] = meas
 
-        print('separation', tensorboard_logs['val_separation'],
-              'effect_size', tensorboard_logs['val_effect_size'], '\n')
+        # print('separation', tensorboard_logs['val_separation'],
+        #       'effect_size', tensorboard_logs['val_effect_size'], '\n')
         return {'val_loss': tensorboard_logs['val_loss'],
                 'log': tensorboard_logs}
 
@@ -184,7 +184,7 @@ class ConditionalBalanceClassifier(BalanceClassifier):
                 0, balance_argmax.unsqueeze(1), 1.)
 
         else:
-            balance_argmax = self.dist.rsample()
+            balance_argmax = self.dist.sample()
         trt_logs = torch.log(trt_counts)
         ref_logs = torch.log(ref_counts)
 
@@ -192,8 +192,8 @@ class ConditionalBalanceClassifier(BalanceClassifier):
         trt_denom = trt_logs * balance_argmax[:, DENOM]
         ref_num = ref_logs * balance_argmax[:, NUM]
         ref_denom = ref_logs * balance_argmax[:, DENOM]
-        trtX = torch.mean(trt_num) - torch.mean(trt_denom)
-        refX = torch.mean(ref_num) - torch.mean(ref_denom)
+        trtX = torch.mean(trt_num, axis=1) - torch.mean(trt_denom, axis=1)
+        refX = torch.mean(ref_num, axis=1) - torch.mean(ref_denom, axis=1)
 
         # conditional logistic regression
         trt_ofs = trt_batch @ self.beta_c + self.beta0
@@ -202,4 +202,4 @@ class ConditionalBalanceClassifier(BalanceClassifier):
         ref_logprob = self.beta_b * refX + ref_ofs
         stack_prob = torch.stack((trt_logprob, ref_logprob))
         log_prob = trt_logprob - torch.logsumexp(stack_prob, dim=0)
-        return log_prob
+        return log_prob, trtX, refX

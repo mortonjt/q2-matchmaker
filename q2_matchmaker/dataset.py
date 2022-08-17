@@ -260,5 +260,5 @@ def add_data_specific_args(parent_parser, add_help=True):
         required=False, type=int, default=100)
     parser.add_argument('--num-workers', type=int, default=1)
     parser.add_argument('--gpus', type=int)
-    parser.add_argument('--output-directory', type=str, default=None)
+    parser.add_argument('--output-directory', type=str, required=True)
     return parser

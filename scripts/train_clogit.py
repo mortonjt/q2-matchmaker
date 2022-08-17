@@ -1,7 +1,7 @@
 import os
 import biom
 import pandas as pd
-from q2_matchmaker._milp import ConditionalBalanceClassifier
+from q2_matchmaker._milp import BalanceClassifier
 from q2_matchmaker.dataset import BiomDataModule, add_data_specific_args
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
@@ -24,15 +24,16 @@ def main(args):
                         batch_size=args.batch_size,
                         num_workers=args.num_workers)
     # TODO : enable init probs later
-    model = ConditionalBalanceClassifier(D, C, init_probs=None,
-                                         temp=0.1, learning_rate=args.learning_rate)
-    ckpt_path = os.path.join(args.output_directory, "checkpoints")
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=ckpt_path,
-        period=1,
-        monitor='val_loss',
-        mode='min',
-        verbose=True)
+    model = BalanceClassifier(D, C, init_probs=None,
+                              temp=0.1, learning_rate=args.learning_rate)
+    # ckpt_path = os.path.join(args.output_directory, "checkpoints")
+    # checkpoint_callback = ModelCheckpoint(
+    #     dirpath=ckpt_path,
+    #     period=1,
+    #     monitor='val_loss',
+    #     mode='min',
+    #     verbose=True)
+
     os.mkdir(args.output_directory)
     tb_logger = pl_loggers.TensorBoardLogger(f'{args.output_directory}/logs/')
     # save hyper-parameters to yaml file
@@ -43,11 +44,11 @@ def main(args):
     trainer = Trainer(
         max_epochs=args.epochs,
         gpus=args.gpus,
-        stochastic_weight_avg=False,
         check_val_every_n_epoch=10,
-        gradient_clip_val=args.grad_clip,
+        gradient_clip_val=10,
         logger=tb_logger,
-        callbacks=[checkpoint_callback])
+        # callbacks=[checkpoint_callback]
+    )
 
     trainer.fit(model, dm)
     trainer.save_checkpoint(
@@ -56,7 +57,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
-    parser = ConditionalBalanceClassifier.add_model_specific_args(
+    parser = BalanceClassifier.add_model_specific_args(
         parser, add_help=False)
     parser = add_data_specific_args(parser, add_help=False)
     args = parser.parse_args()

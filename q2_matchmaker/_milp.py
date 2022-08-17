@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributions import RelaxedOneHotCategorical
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import pytorch_lightning as pl
@@ -10,10 +11,11 @@ import argparse
 NUM, NEUTRAL, DENOM = 0, 1, 2
 
 
-class ConditionalBalanceClassifier(pl.LightningModule):
-    def __init__(self, input_dim, cat_dim, init_probs=None, temp=0.1, learning_rate=1e-3):
+class BalanceClassifier(pl.LightningModule):
+    def __init__(self, input_dim, cat_dim, init_probs=None, temp=0.1,
+                 learning_rate=1e-3):
         # TODO: add option to specify ILR or SLR
-        super(ConditionalBalanceClassifier, self).__init__()
+        super(BalanceClassifier, self).__init__()
         self.save_hyperparameters()
         if init_probs is not None:
             self.logits = nn.Parameter(init_probs)
@@ -31,11 +33,12 @@ class ConditionalBalanceClassifier(pl.LightningModule):
             x = self.dist.sample()
             balance_argmax = torch.argmax(x, axis=0)
             # convert to one-hot matrix
-            balance_argmax = torch.zeros_like(x).scatter_(
+            z = torch.zeros_like(x, device=trt_counts.device)
+            balance_argmax = z.scatter_(
                 0, balance_argmax.unsqueeze(1), 1.)
 
         else:
-            balance_argmax = self.dist.sample()
+            balance_argmax = self.dist.rsample()
         trt_logs = torch.log(trt_counts)
         ref_logs = torch.log(ref_counts)
 
@@ -46,19 +49,32 @@ class ConditionalBalanceClassifier(pl.LightningModule):
         trtX = torch.mean(trt_num) - torch.mean(trt_denom)
         refX = torch.mean(ref_num) - torch.mean(ref_denom)
 
-        # conditional logistic regression
+        # classic logistic regression
         trt_ofs = trt_batch @ self.beta_c + self.beta0
         ref_ofs = ref_batch @ self.beta_c + self.beta0
         trt_logprob = self.beta_b * trtX + trt_ofs
         ref_logprob = self.beta_b * refX + ref_ofs
-        stack_prob = torch.stack((trt_logprob, ref_logprob))
-        log_prob = trt_logprob - torch.logsumexp(stack_prob, dim=0)
-        return log_prob
+        return torch.cat((trt_logprob, ref_logprob))
+
+    def logprob(self, trt_counts, ref_counts, trt_batch, ref_batch):
+        outputs = self.forward(trt_counts, ref_counts, trt_batch, ref_batch)
+        trt_logprob = outputs[:len(trt_counts)]
+        ref_logprob = outputs[:len(ref_counts)]
+        N = len(trt_logprob)
+        o = torch.ones(N, device=trt_counts.device)
+        z = torch.ones(N, device=trt_counts.device)
+        return - (
+            F.binary_cross_entropy(trt_logprob, o) +
+            F.binary_cross_entropy(ref_logprob, z)
+        )
 
     def training_step(self, batch, batch_idx):
+        self.train()
         trt, ref, trt_batch, ref_batch = [x.to(self.device) for x in batch]
-        log_prob = self.forward(trt, ref, trt_batch, ref_batch)
-        loss = - torch.sum(log_prob)
+        log_prob = self.logprob(trt, ref, trt_batch, ref_batch)
+        loss = torch.sum(log_prob)
+        assert torch.isnan(loss).item() is False
+        print('training_step', loss)
         current_lr = self.trainer.lr_schedulers[0]['scheduler'].get_last_lr()[0]
         tensorboard_logs = {'train_loss' : loss, 'lr' : current_lr}
         return {'loss': loss, 'log': tensorboard_logs}
@@ -66,26 +82,31 @@ class ConditionalBalanceClassifier(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         with torch.no_grad():
             trt, ref, trt_batch, ref_batch = [x.to(self.device) for x in batch]
-            log_prob = self.forward(trt, ref, trt_batch, ref_batch)
-            loss = - torch.sum(log_prob)
+            log_prob = self.logprob(trt, ref, trt_batch, ref_batch)
+            loss = torch.sum(log_prob)
 
             pred = self.forward(trt, ref, trt_batch, ref_batch, hard=True)
-            separation = torch.mean((pred > 0).float())
+            N = len(trt)
+
+            separation = torch.mean((pred[:N] > pred[N:]).float())
             idx = torch.randperm(len(ref))
-            ref_pred = self.forward(ref[idx], ref, trt_batch, ref_batch, hard=True)
-            acc = torch.mean((pred > ref_pred).float())
+
+            # ref_pred = self.logprob(ref[idx], ref, trt_batch, ref_batch, hard=True)
+            # acc = torch.mean((pred > ref_pred).float())
 
             current_lr = self.trainer.lr_schedulers[0]['scheduler'].get_last_lr()[0]
             tensorboard_logs = {'val_loss' : loss,
                                 'val_separation' : separation,
-                                'val_accuracy' : acc,
+                                # 'val_accuracy' : acc,
                                 'lr' : current_lr}
             return {'loss': loss, 'log': tensorboard_logs}
 
     def validation_epoch_end(self, outputs):
-        metrics = ['val_loss',
-                   'val_separation',
-                   'val_accuracy']
+        metrics = [
+            'val_loss',
+            'val_separation',
+            #'val_accuracy'
+        ]
         tensorboard_logs = {}
         for m in metrics:
             meas = np.mean(list(map(lambda x: x['log'][m], outputs)))
@@ -113,7 +134,53 @@ class ConditionalBalanceClassifier(pl.LightningModule):
         parser.add_argument(
             '--learning-rate', help='Learning rate',
             required=False, type=float, default=1e-3)
-        parser.add_argument(
-            '--output-dir', help='Path to save all logging files and checkpoints',
-            required=True, type=str, default=None)
+
         return parser
+
+
+class ConditionalBalanceClassifier(BalanceClassifier):
+    def __init__(self, input_dim, cat_dim, init_probs=None, temp=0.1, learning_rate=1e-3):
+        # TODO: add option to specify ILR or SLR
+        super(ConditionalBalanceClassifier, self).__init__(input_dim, cat_dim, init_probs, temp, learning_rate)
+        self.save_hyperparameters()
+        if init_probs is not None:
+            self.logits = nn.Parameter(init_probs)
+        else:
+            self.logits = nn.Parameter(torch.ones((input_dim, 3)))
+        self.dist = RelaxedOneHotCategorical(logits=self.logits, temperature=temp)
+        self.beta_c = nn.Parameter(torch.zeros(cat_dim))  # class slope
+        self.beta_b = nn.Parameter(torch.Tensor([0.01]))  # batch slope
+        self.beta0 = nn.Parameter(torch.Tensor([0.01]))   # intercept
+        self.lr = learning_rate
+
+    # TODO: make sure this returns outputs rather than a loss
+    def forward(self, trt_counts, ref_counts, trt_batch, ref_batch, hard=False):
+        # sample from one hot to obtain balances
+        if hard:
+            x = self.dist.sample()
+            balance_argmax = torch.argmax(x, axis=0)
+            # convert to one-hot matrix
+            z = torch.zeros_like(x, device=trt_counts.device)
+            balance_argmax = z.scatter_(
+                0, balance_argmax.unsqueeze(1), 1.)
+
+        else:
+            balance_argmax = self.dist.rsample()
+        trt_logs = torch.log(trt_counts)
+        ref_logs = torch.log(ref_counts)
+
+        trt_num = trt_logs * balance_argmax[:, NUM]
+        trt_denom = trt_logs * balance_argmax[:, DENOM]
+        ref_num = ref_logs * balance_argmax[:, NUM]
+        ref_denom = ref_logs * balance_argmax[:, DENOM]
+        trtX = torch.mean(trt_num) - torch.mean(trt_denom)
+        refX = torch.mean(ref_num) - torch.mean(ref_denom)
+
+        # conditional logistic regression
+        trt_ofs = trt_batch @ self.beta_c + self.beta0
+        ref_ofs = ref_batch @ self.beta_c + self.beta0
+        trt_logprob = self.beta_b * trtX + trt_ofs
+        ref_logprob = self.beta_b * refX + ref_ofs
+        stack_prob = torch.stack((trt_logprob, ref_logprob))
+        log_prob = trt_logprob - torch.logsumexp(stack_prob, dim=0)
+        return log_prob

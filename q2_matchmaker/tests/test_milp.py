@@ -32,9 +32,9 @@ class TestMILP(unittest.TestCase):
                         train_column='train',
                         batch_size=5,
                         num_workers=1)
-    model = BalanceClassifier(D, C)
+    model = BalanceClassifier(D, C, learning_rate=0.5)
     trainer = Trainer(
-        max_epochs=1,
+        max_epochs=100,
         check_val_every_n_epoch=1)
     trainer.fit(model, dm)
 

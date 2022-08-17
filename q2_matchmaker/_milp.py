@@ -38,7 +38,7 @@ class BalanceClassifier(pl.LightningModule):
                 0, balance_argmax.unsqueeze(1), 1.)
 
         else:
-            balance_argmax = self.dist.rsample()
+            balance_argmax = self.dist.sample()
         trt_logs = torch.log(trt_counts)
         ref_logs = torch.log(ref_counts)
 
@@ -55,7 +55,6 @@ class BalanceClassifier(pl.LightningModule):
         trt_logprob = self.beta_b * trtX + trt_ofs
         ref_logprob = self.beta_b * refX + ref_ofs
         res = torch.cat((trt_logprob, ref_logprob))
-        print('res', res.shape, trt_counts.shape, ref_counts.shape)
         return res
 
     def logprob(self, trt_counts, ref_counts, trt_batch, ref_batch):
@@ -65,8 +64,8 @@ class BalanceClassifier(pl.LightningModule):
         N = len(trt_logprob)
         o = torch.ones(N, device=trt_counts.device)
         z = torch.zeros(N, device=trt_counts.device)
-        lp = F.binary_cross_entropy(trt_logprob, o)
-        lp += F.binary_cross_entropy(ref_logprob, z)
+        lp = F.binary_cross_entropy_with_logits(trt_logprob, o)
+        lp += F.binary_cross_entropy_with_logits(ref_logprob, z)
         return lp
 
     def training_step(self, batch, batch_idx):
@@ -75,11 +74,9 @@ class BalanceClassifier(pl.LightningModule):
         log_prob = self.logprob(trt, ref, trt_batch, ref_batch)
         loss = torch.sum(log_prob)
         assert torch.isnan(loss).item() is False
-        print('training_step', loss)
         current_lr = self.trainer.lr_schedulers[0]['scheduler'].get_last_lr()[0]
         tensorboard_logs = {'train_loss' : loss, 'lr' : current_lr}
-        return loss
-        #return {'loss': loss, 'log': tensorboard_logs}
+        return {'loss': loss, 'log': tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
         with torch.no_grad():
@@ -102,7 +99,6 @@ class BalanceClassifier(pl.LightningModule):
                                 # 'val_accuracy' : acc,
                                 'lr' : current_lr}
             return {'loss': loss, 'log': tensorboard_logs}
-            # return loss
 
 
     def validation_epoch_end(self, outputs):
@@ -121,9 +117,7 @@ class BalanceClassifier(pl.LightningModule):
                 'log': tensorboard_logs}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(
-            self.parameters(), lr=self.hparams['learning_rate'],
-            weight_decay=0)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
         scheduler = CosineAnnealingWarmRestarts(
             optimizer, T_0=2, T_mult=2)
         return [optimizer], [scheduler]

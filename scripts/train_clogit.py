@@ -1,13 +1,29 @@
 import os
 import biom
+import torch
+import arviz as az
+import numpy as np
 import pandas as pd
-from q2_matchmaker._milp import BalanceClassifier
+from q2_matchmaker._milp import BalanceClassifier, ConditionalBalanceClassifier
 from q2_matchmaker.dataset import BiomDataModule, add_data_specific_args
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning import loggers as pl_loggers
 import yaml
 import argparse
+
+
+def preprocess_init(table, path, key='diff'):
+    diffs = pd.read_csv(path, index_col=0)
+    round_diffs = diffs.applymap(np.tanh).round()
+    vc = round_diffs.apply(lambda x: x.value_counts(), axis=1)
+    vc = vc.fillna(0) + 1
+    vc = vc.apply(lambda x: np.log(x / x.sum()), axis=1)
+    unobserved_ids = list(set(table.ids(axis='observation')) - set(vc.index))
+    vc = vc.reindex(unobserved_ids)
+    idx = pd.isnull(vc).sum(axis=1) == 3
+    vc.loc[idx] = np.log([0.05, 0.9, 0.05])  # push prior towards neutral
+    return vc
 
 
 def main(args):
@@ -23,10 +39,15 @@ def main(args):
                         train_column=args.train_column,
                         batch_size=args.batch_size,
                         num_workers=args.num_workers)
+    if args.init_probs is not None:
+        probs = torch.Tensor(preprocess_init(table, args.init_probs).values)
+    else:
+        probs = None
 
     # TODO : enable init probs later
-    model = ConditionalBalanceClassifier(D, C, init_probs=None,
-                                         temp=0.1, learning_rate=args.learning_rate)
+    model = ConditionalBalanceClassifier(
+        D, C, init_probs=probs,
+        temp=0.1, learning_rate=args.learning_rate)
 
     # ckpt_path = os.path.join(args.output_directory, "checkpoints")
     # checkpoint_callback = ModelCheckpoint(

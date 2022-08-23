@@ -46,14 +46,17 @@ class BalanceClassifier(pl.LightningModule):
         trt_denom = trt_logs * balance_argmax[:, DENOM]
         ref_num = ref_logs * balance_argmax[:, NUM]
         ref_denom = ref_logs * balance_argmax[:, DENOM]
-        trtX = torch.mean(trt_num, axis=1) - torch.mean(trt_denom, axis=1)
-        refX = torch.mean(ref_num, axis=1) - torch.mean(ref_denom, axis=1)
+        trtX = torch.sum(trt_num, axis=1) - torch.sum(trt_denom, axis=1)
+        refX = torch.sum(ref_num, axis=1) - torch.sum(ref_denom, axis=1)
 
         # classic logistic regression
-        trt_ofs = trt_batch @ self.beta_c + self.beta0
-        ref_ofs = ref_batch @ self.beta_c + self.beta0
-        trt_logprob = self.beta_b * trtX + trt_ofs
-        ref_logprob = self.beta_b * refX + ref_ofs
+        # trt_ofs = trt_batch @ self.beta_c + self.beta0
+        # ref_ofs = ref_batch @ self.beta_c + self.beta0
+        # trt_logprob = self.beta_b * trtX + trt_ofs
+        # ref_logprob = self.beta_b * refX + ref_ofs
+        trt_logprob = trtX
+        ref_logprob = refX
+
         res = torch.cat((trt_logprob, ref_logprob))
         return res, trtX, refX
 
@@ -77,15 +80,18 @@ class BalanceClassifier(pl.LightningModule):
         assert torch.isnan(loss).item() is False
         current_lr = self.trainer.lr_schedulers[0]['scheduler'].get_last_lr()[0]
 
-        separation = torch.mean(((trtX - refX) > 0).float())
+        separation = torch.mean((trtX  > refX).float())
         idx = torch.randperm(len(ref))
 
         effect_size = torch.mean(torch.abs(trtX - refX)).float()
+
         tensorboard_logs = {
             'train_loss' : loss.detach().cpu().numpy(),
             'train_separation' : separation.detach().cpu().numpy(),
             'train_effect_size' : effect_size.detach().cpu().numpy(),
             'lr' : current_lr}
+        print('separation', tensorboard_logs['train_separation'],
+              'effect_size', tensorboard_logs['train_effect_size'], '\n')
         return {'loss': loss, 'log': tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
@@ -131,8 +137,6 @@ class BalanceClassifier(pl.LightningModule):
             self.log(m, meas)
             tensorboard_logs[m] = meas
 
-        # print('separation', tensorboard_logs['val_separation'],
-        #       'effect_size', tensorboard_logs['val_effect_size'], '\n')
         return {'val_loss': tensorboard_logs['val_loss'],
                 'log': tensorboard_logs}
 
@@ -176,7 +180,7 @@ class ConditionalBalanceClassifier(BalanceClassifier):
     def forward(self, trt_counts, ref_counts, trt_batch, ref_batch, hard=False):
         # sample from one hot to obtain balances
         if hard:
-            x = self.dist.sample()
+            x = self.dist.sample().to(trt_counts.device)
             balance_argmax = torch.argmax(x, axis=0)
             # convert to one-hot matrix
             z = torch.zeros_like(x, device=trt_counts.device)
@@ -184,7 +188,7 @@ class ConditionalBalanceClassifier(BalanceClassifier):
                 0, balance_argmax.unsqueeze(1), 1.)
 
         else:
-            balance_argmax = self.dist.sample()
+            balance_argmax = self.dist.sample().to(trt_counts.device)
         trt_logs = torch.log(trt_counts)
         ref_logs = torch.log(ref_counts)
 
